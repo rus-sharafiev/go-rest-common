@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rus-sharafiev/go-rest-common/exception"
@@ -73,4 +74,19 @@ func (p *Postgres) WriteJsonString(w http.ResponseWriter, query *string, args ..
 		return
 	}
 	fmt.Fprint(w, result.String)
+}
+
+// Message JSON string serialized by PostgreSQL via provided websocket connection
+func (p *Postgres) MessageJsonString(conn *websocket.Conn, query *string, args ...any) {
+	var result sql.NullString
+	if err := p.pool.QueryRow(context.Background(), *query, args...).Scan(&result); err == nil {
+
+		if result.Valid {
+			conn.WriteMessage(websocket.TextMessage, []byte(result.String))
+		}
+
+	} else if err != pgx.ErrNoRows {
+		fmt.Println("error sending message")
+		exception.WsError(conn, err)
+	}
 }

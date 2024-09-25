@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -131,4 +132,11 @@ func PgxNoRows(w http.ResponseWriter, err error) {
 	} else {
 		InternalServerError(w, err)
 	}
+}
+
+func WsError(conn *websocket.Conn, err error) {
+	conn.WriteMessage(
+		websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error()),
+	)
 }
