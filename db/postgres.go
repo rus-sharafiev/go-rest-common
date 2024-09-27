@@ -77,16 +77,24 @@ func (p *Postgres) WriteJsonString(w http.ResponseWriter, query *string, args ..
 }
 
 // Message JSON string serialized by PostgreSQL via provided websocket connection
-func (p *Postgres) MessageJsonString(conn *websocket.Conn, query *string, args ...any) {
-	var result sql.NullString
-	if err := p.pool.QueryRow(context.Background(), *query, args...).Scan(&result); err == nil {
+func (p *Postgres) MessageJsonString(conn *websocket.Conn, query *string, args ...any) error {
+	if err := conn.WriteMessage(websocket.PingMessage, make([]byte, 0)); err == nil {
+		var result sql.NullString
+		if err = p.pool.QueryRow(context.Background(), *query, args...).Scan(&result); err == nil {
 
-		if result.Valid {
-			conn.WriteMessage(websocket.TextMessage, []byte(result.String))
+			if result.Valid {
+				if err = conn.WriteMessage(websocket.TextMessage, []byte(result.String)); err != nil {
+					return err
+				}
+			}
+
+		} else if err != pgx.ErrNoRows {
+			fmt.Println("error sending message")
+			return err
 		}
-
-	} else if err != pgx.ErrNoRows {
-		fmt.Println("error sending message")
-		exception.WsError(conn, err)
+	} else {
+		return err
 	}
+
+	return nil
 }
