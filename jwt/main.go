@@ -1,7 +1,6 @@
 package jwt
 
 import (
-	"net/http"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -28,31 +27,18 @@ func GenerateAccessToken(id int, userAccess string) (string, error) {
 	return token.SignedString([]byte(*common.Config.JwtKey))
 }
 
-func SetRefreshToken(id int, userAccess string, w http.ResponseWriter) error {
+func GenerateRefreshToken(id int, userAccess string) (string, error) {
 	claims := Claims{
 		id,
 		userAccess,
 		jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * 24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * 30 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	refreshToken, err := token.SignedString([]byte(*common.Config.JwtKey))
-	if err != nil {
-		return err
-	}
-
-	cookie := &http.Cookie{
-		Name:   "refresh-token",
-		Value:  "Bearer " + refreshToken,
-		Path:   "/api/auth/refresh",
-		MaxAge: 0,
-	}
-	http.SetCookie(w, cookie)
-
-	return nil
+	return token.SignedString([]byte(*common.Config.JwtKey))
 }
 
 func Validate(tokenString string) (*Claims, error) {
