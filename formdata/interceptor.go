@@ -31,20 +31,42 @@ type uploadError struct {
 // https://github.com/rus-sharafiev/fetch-api/blob/master/src/fetch-api.ts#L180
 func Interceptor(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		config := common.Config.ConverterConfig
 
-		// Check for whitelist and blacklist
-		if wl := common.Config.FormdataWhitelist; wl != nil && !inList(*wl, r) {
-			next.ServeHTTP(w, r)
-			return
-		} else if bl := common.Config.FormdataBlacklist; wl == nil && bl != nil && inList(*bl, r) {
+		// Check whether to use the converter
+		if config == nil {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// Check whether request contains multipart/form-data
-		if mr, err := r.MultipartReader(); err == nil {
+		// Check for whitea and black lists
+		if wl := config.Whitelist; wl != nil && !inList(*wl, r) {
+			next.ServeHTTP(w, r)
+			return
+		} else if bl := config.Blacklist; wl == nil && bl != nil && inList(*bl, r) {
+			next.ServeHTTP(w, r)
+			return
+		}
 
-			// Use user folder if user is authorized or return 401
+		// Select the upload dir
+		uploadPath := "uploads"
+
+		if config.UploadPath != nil {
+			uploadPath = *config.UploadPath
+		}
+
+		if config.UploadPathByRoute != nil {
+			currentPath := strings.Split(strings.Trim(r.URL.Path, "/"), "/")[0]
+			pathByRouteMap := *config.UploadPathByRoute
+			if pathByRoute := pathByRouteMap[currentPath]; len(pathByRoute) > 0 {
+				uploadPath = pathByRoute
+			}
+		}
+
+		// Use the user subfolder
+		fullPath := uploadPath
+		if config.UseUserSubfolder != nil && *config.UseUserSubfolder {
+
 			userDir := ""
 			if userID := r.Header.Get("userID"); len(userID) != 0 {
 				userDir = userID
@@ -53,16 +75,21 @@ func Interceptor(next http.Handler) http.Handler {
 				return
 			}
 
-			// Check if subdirectory exists
-			fullPath := path.Join(*common.Config.UploadDir, userDir)
-			if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-				if err := os.Mkdir(fullPath, 0755); err != nil {
-					exception.InternalServerError(w, err)
-					return
-				}
-			}
+			fullPath = path.Join(uploadPath, userDir)
+		}
 
-			// Read form
+		// Check if the dir exists
+		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+			if err := os.Mkdir(fullPath, 0755); err != nil {
+				exception.InternalServerError(w, err)
+				return
+			}
+		}
+
+		// Check whether the request contains multipart/form-data
+		if mr, err := r.MultipartReader(); err == nil {
+
+			// Read the form
 			form, err := mr.ReadForm(32 << 20)
 			if err != nil {
 				exception.InternalServerError(w, err)
@@ -112,7 +139,7 @@ func Interceptor(next http.Handler) http.Handler {
 							return
 						}
 
-						resultChan <- []string{name, "/" + strings.Replace(fileName, fullPath, *common.Config.UploadDir, 1)}
+						resultChan <- []string{name, "/" + strings.Replace(fileName, fullPath, uploadPath, 1)}
 					}()
 				}
 

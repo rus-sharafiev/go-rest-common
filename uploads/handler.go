@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strconv"
 
-	common "github.com/rus-sharafiev/go-rest-common"
 	"github.com/rus-sharafiev/go-rest-common/exception"
 	"github.com/rus-sharafiev/go-rest-common/jwt"
 )
@@ -30,14 +29,14 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	uploadDir := filepath.Join(*common.Config.UploadDir, strconv.Itoa(claims.UserId))
+	uploadDir := filepath.Join("uploads", strconv.Itoa(claims.UserId))
 	// if claims.UserAccess == "ADMIN" {
 	// 	uploadDir = filepath.Join(*common.Config.UploadDir)
 	// }
 
 	r.URL.RawQuery = ""
 	w.Header().Add("Cache-Control", "private, max-age=31536000, immutable")
-	http.StripPrefix(*common.Config.UploadPath, http.FileServer(http.Dir(uploadDir))).ServeHTTP(w, r)
+	http.StripPrefix("uploads", http.FileServer(http.Dir(uploadDir))).ServeHTTP(w, r)
 }
 
 var Handler = &handler{}
