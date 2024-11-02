@@ -63,8 +63,12 @@ func Interceptor(next http.Handler) http.Handler {
 			}
 		}
 
-		// Use the user subfolder
+		// Use subfolders
 		fullPath := uploadPath
+		if config.UploadPathPrefix != nil {
+			fullPath = path.Join(*config.UploadPathPrefix, fullPath)
+		}
+
 		if config.UseUserSubfolder != nil && *config.UseUserSubfolder {
 
 			userDir := ""
@@ -75,7 +79,7 @@ func Interceptor(next http.Handler) http.Handler {
 				return
 			}
 
-			fullPath = path.Join(uploadPath, userDir)
+			fullPath = path.Join(fullPath, userDir)
 		}
 
 		// Check if the dir exists

@@ -8,6 +8,7 @@ type converterConfig struct {
 	Whitelist         *[]string          `json:"whitelist"`
 	Blacklist         *[]string          `json:"blacklist"`
 	UploadPath        *string            `json:"uploadPath"`
+	UploadPathPrefix  *string            `json:"uploadPathPrefix"`
 	UseUserSubfolder  *bool              `json:"useUserSubfolder"`
 	UploadPathByRoute *map[string]string `json:"uploadPathByRoute"`
 }
