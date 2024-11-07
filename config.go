@@ -11,6 +11,7 @@ type converterConfig struct {
 	UploadPathPrefix  *string            `json:"uploadPathPrefix"`
 	UseUserSubfolder  *bool              `json:"useUserSubfolder"`
 	UploadPathByRoute *map[string]string `json:"uploadPathByRoute"`
+	OptimizeImages    *map[string][]int  `json:"optimizeImages"`
 }
 
 type config struct {
@@ -30,6 +31,7 @@ var Config config
 
 func (c config) IsNotValid() bool {
 	mandatotyFields := []*string{
+		c.Db,
 		c.Port,
 		c.StaticDir,
 		c.JwtKey,

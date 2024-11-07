@@ -1,8 +1,12 @@
 package formdata
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"net/http"
 	"os"
@@ -13,8 +17,12 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/kolesa-team/go-webp/encoder"
+	cwebp "github.com/kolesa-team/go-webp/webp"
 	common "github.com/rus-sharafiev/go-rest-common"
 	"github.com/rus-sharafiev/go-rest-common/exception"
+	"golang.org/x/image/draw"
+	"golang.org/x/image/webp"
 )
 
 type uploadErrors struct {
@@ -31,6 +39,7 @@ type uploadError struct {
 // https://github.com/rus-sharafiev/fetch-api/blob/master/src/fetch-api.ts#L180
 func Interceptor(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		currentPath := strings.Split(strings.Trim(r.URL.Path, "/"), "/")[0]
 		config := common.Config.ConverterConfig
 
 		// Check whether to use the converter
@@ -56,7 +65,6 @@ func Interceptor(next http.Handler) http.Handler {
 		}
 
 		if config.UploadPathByRoute != nil {
-			currentPath := strings.Split(strings.Trim(r.URL.Path, "/"), "/")[0]
 			pathByRouteMap := *config.UploadPathByRoute
 			if pathByRoute := pathByRouteMap[currentPath]; len(pathByRoute) > 0 {
 				uploadPath = pathByRoute
@@ -137,10 +145,142 @@ func Interceptor(next http.Handler) http.Handler {
 						}
 						defer outFile.Close()
 
-						_, err = io.Copy(outFile, file)
-						if err != nil {
-							errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
-							return
+						if config.OptimizeImages == nil {
+
+							// Write original file
+							_, err = io.Copy(outFile, file)
+							if err != nil {
+								errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
+								return
+							}
+
+							// Create optimized images
+						} else {
+
+							// Write original file and fill the buffer for image.Image
+							var fileBuf bytes.Buffer
+							fileReader := io.TeeReader(file, &fileBuf)
+							_, err = io.Copy(outFile, fileReader)
+							if err != nil {
+								errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
+								return
+							}
+
+							routesMap := *config.OptimizeImages
+							var sizesArr *[]int
+							for route, v := range routesMap {
+								if route == currentPath {
+									sizesArr = &v
+								}
+							}
+
+							contentType := fileHeader.Header.Get("Content-Type")
+							allowedTypes := []string{"image/png", "image/jpeg", "image/webp"}
+							isImage := slices.Contains(allowedTypes, contentType)
+
+							if sizesArr != nil && isImage {
+								isWebP := false
+								var img image.Image
+								switch contentType {
+								case "image/png":
+									img, _ = png.Decode(&fileBuf)
+								case "image/jpeg":
+									img, _ = jpeg.Decode(&fileBuf)
+								case "image/webp":
+									img, _ = webp.Decode(&fileBuf)
+									isWebP = true
+								}
+
+								imgWidth := img.Bounds().Bounds().Max.X
+								imgHeight := img.Bounds().Bounds().Max.Y
+								aspectRatio := float32(imgWidth) / float32(imgHeight)
+
+								// Create webp options object
+								webpOptions, err := encoder.NewLossyEncoderOptions(encoder.PresetDefault, 75)
+								if err != nil {
+									errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
+									return
+								}
+
+								// Create optimized images with required width
+								sizes := *sizesArr
+								if len(sizes) > 0 {
+
+									imageSizesChan := make(chan []string)
+									errorSizesChan := make(chan error)
+
+									for _, size := range sizes {
+										size := size
+
+										go func() {
+											sizeString := strconv.Itoa(size)
+
+											// Create output file
+											optimizedName := path.Join(fullPath, id.String()+"_"+sizeString+"_optimized.webp")
+											outFile, err := os.Create(optimizedName)
+											if err != nil {
+												errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
+												return
+											}
+											defer outFile.Close()
+
+											if size == 0 || size >= imgWidth {
+
+												// if source img is webp, just copy
+												if isWebP {
+
+													_, err = io.Copy(outFile, file)
+													if err != nil {
+														errorSizesChan <- err
+														return
+													}
+
+													// otherwise encode to webp
+												} else {
+
+													if err := cwebp.Encode(outFile, img, webpOptions); err != nil {
+														errorSizesChan <- err
+														return
+													}
+												}
+
+											} else {
+
+												// Create new image with long side target size
+												dst := image.NewRGBA(image.Rect(0, 0, size, int(float32(size)/aspectRatio)))
+
+												// Resize
+												draw.BiLinear.Scale(dst, dst.Rect, img, img.Bounds(), draw.Over, nil)
+
+												// Encode to jpeg
+												if err := cwebp.Encode(outFile, dst, webpOptions); err != nil {
+													errorSizesChan <- err
+													return
+												}
+											}
+
+											imageSizesChan <- []string{sizeString, optimizedName}
+										}()
+									}
+
+									imageSizes := make(map[string]string)
+									var errorSizes error
+
+									for range sizes {
+										select {
+										case sizes := <-imageSizesChan:
+											imageSizes[sizes[0]] = sizes[1]
+										case err := <-errorSizesChan:
+											errorSizes = err
+										}
+									}
+
+									if errorSizes != nil {
+										errChan <- uploadError{Filename: fileHeader.Filename, Error: errorSizes.Error()}
+										return
+									}
+								}
+							}
 						}
 
 						resultChan <- []string{name, "/" + strings.Replace(fileName, fullPath, uploadPath, 1)}
