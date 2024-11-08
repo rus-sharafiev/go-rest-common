@@ -108,7 +108,7 @@ func Interceptor(next http.Handler) http.Handler {
 				return
 			}
 
-			resultChan := make(chan []string)
+			resultChan := make(chan []interface{})
 			errChan := make(chan uploadError)
 			fileList := []string{}
 
@@ -137,7 +137,7 @@ func Interceptor(next http.Handler) http.Handler {
 
 						fileName := path.Join(fullPath, id.String()+filepath.Ext(fileHeader.Filename))
 
-						// Write
+						// Create output file
 						outFile, err := os.Create(fileName)
 						if err != nil {
 							errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
@@ -178,8 +178,10 @@ func Interceptor(next http.Handler) http.Handler {
 							allowedTypes := []string{"image/png", "image/jpeg", "image/webp"}
 							isImage := slices.Contains(allowedTypes, contentType)
 
-							if sizesArr != nil && isImage {
+							if sizesArr != nil && len(*sizesArr) > 0 && isImage {
+								sizes := *sizesArr
 								isWebP := false
+
 								var img image.Image
 								switch contentType {
 								case "image/png":
@@ -196,97 +198,101 @@ func Interceptor(next http.Handler) http.Handler {
 								aspectRatio := float32(imgWidth) / float32(imgHeight)
 
 								// Create webp options object
-								webpOptions, err := encoder.NewLossyEncoderOptions(encoder.PresetDefault, 75)
+								webpOptions, err := encoder.NewLossyEncoderOptions(encoder.PresetDefault, 90)
 								if err != nil {
 									errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
 									return
 								}
 
 								// Create optimized images with required width
-								sizes := *sizesArr
-								if len(sizes) > 0 {
 
-									imageSizesChan := make(chan []string)
-									errorSizesChan := make(chan error)
+								imageSizesChan := make(chan []string)
+								errorSizesChan := make(chan error)
 
-									for _, size := range sizes {
-										size := size
+								for _, size := range sizes {
+									size := size
 
-										go func() {
-											sizeString := strconv.Itoa(size)
+									go func() {
+										sizeString := strconv.Itoa(size)
 
-											// Create output file
-											optimizedName := path.Join(fullPath, id.String()+"_"+sizeString+"_optimized.webp")
-											outFile, err := os.Create(optimizedName)
-											if err != nil {
-												errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
-												return
-											}
-											defer outFile.Close()
+										// Create output file
+										optimizedName := path.Join(fullPath, id.String()+"_"+sizeString+"_optimized.webp")
+										outFile, err := os.Create(optimizedName)
+										if err != nil {
+											errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
+											return
+										}
+										defer outFile.Close()
 
-											if size == 0 || size >= imgWidth {
+										if size == 0 || size >= imgWidth {
 
-												// if source img is webp, just copy
-												if isWebP {
+											// if source img is webp, just copy
+											if isWebP {
 
-													_, err = io.Copy(outFile, file)
-													if err != nil {
-														errorSizesChan <- err
-														return
-													}
-
-													// otherwise encode to webp
-												} else {
-
-													if err := cwebp.Encode(outFile, img, webpOptions); err != nil {
-														errorSizesChan <- err
-														return
-													}
+												_, err = io.Copy(outFile, file)
+												if err != nil {
+													errorSizesChan <- err
+													return
 												}
 
+												// otherwise encode to webp
 											} else {
 
-												// Create new image with long side target size
-												dst := image.NewRGBA(image.Rect(0, 0, size, int(float32(size)/aspectRatio)))
-
-												// Resize
-												draw.BiLinear.Scale(dst, dst.Rect, img, img.Bounds(), draw.Over, nil)
-
-												// Encode to jpeg
-												if err := cwebp.Encode(outFile, dst, webpOptions); err != nil {
+												if err := cwebp.Encode(outFile, img, webpOptions); err != nil {
 													errorSizesChan <- err
 													return
 												}
 											}
 
-											imageSizesChan <- []string{sizeString, optimizedName}
-										}()
-									}
+										} else {
 
-									imageSizes := make(map[string]string)
-									var errorSizes error
+											// Create new image with long side target size
+											dst := image.NewRGBA(image.Rect(0, 0, size, int(float32(size)/aspectRatio)))
 
-									for range sizes {
-										select {
-										case sizes := <-imageSizesChan:
-											imageSizes[sizes[0]] = sizes[1]
-										case err := <-errorSizesChan:
-											errorSizes = err
+											// Resize
+											draw.BiLinear.Scale(dst, dst.Rect, img, img.Bounds(), draw.Over, nil)
+
+											// Encode to jpeg
+											if err := cwebp.Encode(outFile, dst, webpOptions); err != nil {
+												errorSizesChan <- err
+												return
+											}
 										}
-									}
 
-									if errorSizes != nil {
-										errChan <- uploadError{Filename: fileHeader.Filename, Error: errorSizes.Error()}
-										return
+										imageSizesChan <- []string{sizeString, "/" + strings.Replace(optimizedName, fullPath, uploadPath, 1)}
+									}()
+								}
+
+								imageSizes := make(map[string]string)
+								var errorSizes error
+
+								for range sizes {
+									select {
+									case sizes := <-imageSizesChan:
+										imageSizes[sizes[0]] = sizes[1]
+									case err := <-errorSizesChan:
+										errorSizes = err
 									}
 								}
+
+								if errorSizes != nil {
+									errChan <- uploadError{Filename: fileHeader.Filename, Error: errorSizes.Error()}
+									return
+								}
+
+								imageSizes["original"] = "/" + strings.Replace(fileName, fullPath, uploadPath, 1)
+
+								resultChan <- []interface{}{name, imageSizes}
+
+							} else {
+
+								resultChan <- []interface{}{name, "/" + strings.Replace(fileName, fullPath, uploadPath, 1)}
+
 							}
 						}
 
-						resultChan <- []string{name, "/" + strings.Replace(fileName, fullPath, uploadPath, 1)}
 					}()
 				}
-
 			}
 
 			// Create uploaded files map and errors slice
@@ -296,22 +302,32 @@ func Interceptor(next http.Handler) http.Handler {
 			for range fileList {
 				select {
 				case result := <-resultChan:
-					name := result[0]
-					fileName := result[1]
+					if name, ok := result[0].(string); ok {
+						fileName := result[1]
 
-					// Add uploaded file url to map as string or append to existing slice
-					if filesUrlMap[name] == nil {
+						// Add uploaded file url to map as string or append to existing slice
+						if filesUrlMap[name] == nil {
 
-						filesUrlMap[name] = fileName
+							filesUrlMap[name] = fileName
 
-					} else {
+						} else {
 
-						if existingStr, ok := filesUrlMap[name].(string); ok {
-							filesUrlMap[name] = []string{existingStr, fileName}
-						}
+							if stringName, ok := fileName.(string); ok {
 
-						if existingSlice, ok := filesUrlMap[name].([]string); ok {
-							filesUrlMap[name] = append(existingSlice, fileName)
+								if existingStr, ok := filesUrlMap[name].(string); ok {
+									filesUrlMap[name] = []string{existingStr, stringName}
+								} else if existingSlice, ok := filesUrlMap[name].([]string); ok {
+									filesUrlMap[name] = append(existingSlice, stringName)
+								}
+
+							} else if mapNames, ok := fileName.(map[string]string); ok {
+
+								if existingStr, ok := filesUrlMap[name].(map[string]string); ok {
+									filesUrlMap[name] = []map[string]string{existingStr, mapNames}
+								} else if existingSlice, ok := filesUrlMap[name].([]map[string]string); ok {
+									filesUrlMap[name] = append(existingSlice, mapNames)
+								}
+							}
 						}
 					}
 
