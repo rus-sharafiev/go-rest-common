@@ -25,10 +25,10 @@ var (
 	Instance    Postgres
 )
 
-func Connect(dbName string) {
+func Connect(connString string) {
 	connectOnce.Do(func() {
 
-		pool, err := pgxpool.New(context.Background(), "postgres:///"+dbName)
+		pool, err := pgxpool.New(context.Background(), connString)
 		if err != nil {
 			log.Fatalf("\x1b[2mPostgreSQL:\x1b[0m\x1b[31m unable to create database connection: %s \x1b[0m\n\n", err.Error())
 		}

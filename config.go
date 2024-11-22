@@ -8,28 +8,33 @@ import (
 )
 
 type converterConfig struct {
-	Whitelist         *[]string          `json:"whitelist"`
-	Blacklist         *[]string          `json:"blacklist"`
-	UploadPath        *string            `json:"uploadPath"`
-	UploadPathPrefix  *string            `json:"uploadPathPrefix"`
-	UseUserSubfolder  *bool              `json:"useUserSubfolder"`
-	UploadPathByRoute *map[string]string `json:"uploadPathByRoute"`
-	OptimizeImages    *map[string][]int  `json:"optimizeImages"`
+	Whitelist         *[]string          `json:"whitelist,omitempty"`
+	Blacklist         *[]string          `json:"blacklist,omitempty"`
+	UploadPath        *string            `json:"uploadPath,omitempty"`
+	UploadPathPrefix  *string            `json:"uploadPathPrefix,omitempty"`
+	UseUserSubfolder  *bool              `json:"useUserSubfolder,omitempty"`
+	UploadPathByRoute *map[string]string `json:"uploadPathByRoute,omitempty"`
+	OptimizeImages    *map[string][]int  `json:"optimizeImages,omitempty"`
+}
+
+type authConfig struct {
+	Prefix *[]string `json:"prefix,omitempty"`
 }
 
 type config struct {
-	Db                *string          `json:"db"`
-	Port              *string          `json:"port"`
-	StaticDir         *string          `json:"staticDir"`
-	JwtKey            *string          `json:"jwtKey"`
-	TelegramKey       *string          `json:"telegramKey"`
-	TelegramAuthToken *string          `json:"telegramAuthToken"`
-	RecaptchaSecret   *string          `json:"recaptchaSecret"`
-	MailLogin         *string          `json:"mailLogin"`
-	MailPassword      *string          `json:"mailPassword"`
-	MailHost          *string          `json:"mailHost"`
-	RefreshCookiePath *string          `json:"refreshCookiePath"`
-	ConverterConfig   *converterConfig `json:"formdataConverter"`
+	Port              *string          `json:"port,omitempty"`
+	DbConnString      *string          `json:"dbConnString,omitempty"`
+	StaticDir         *string          `json:"staticDir,omitempty"`
+	JwtKey            *string          `json:"jwtKey,omitempty"`
+	TelegramKey       *string          `json:"telegramKey,omitempty"`
+	TelegramAuthToken *string          `json:"telegramAuthToken,omitempty"`
+	RecaptchaSecret   *string          `json:"recaptchaSecret,omitempty"`
+	MailLogin         *string          `json:"mailLogin,omitempty"`
+	MailPassword      *string          `json:"mailPassword,omitempty"`
+	MailHost          *string          `json:"mailHost,omitempty"`
+	RefreshCookiePath *string          `json:"refreshCookiePath,omitempty"`
+	ConverterConfig   *converterConfig `json:"formdataConverter,omitempty"`
+	Auth              *authConfig      `json:"auth,omitempty"`
 }
 
 var Config config
@@ -61,7 +66,7 @@ func LoadConf() {
 
 func (c config) IsNotValid() bool {
 	mandatotyFields := []*string{
-		c.Db,
+		c.DbConnString,
 		c.Port,
 		c.JwtKey,
 	}
