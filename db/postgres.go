@@ -98,3 +98,11 @@ func (p *Postgres) MessageJsonString(conn *websocket.Conn, query *string, args .
 
 	return nil
 }
+
+func (p *Postgres) CopyFrom(tableName string, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error) {
+	count, err := p.pool.CopyFrom(context.Background(), pgx.Identifier{tableName}, columnNames, rowSrc)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
