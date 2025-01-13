@@ -4,7 +4,7 @@ go 1.23
 
 require (
 	github.com/gorilla/websocket v1.5.3
-	github.com/jackc/pgx/v5 v5.7.1
+	github.com/jackc/pgx/v5 v5.7.2
 	golang.org/x/image v0.23.0
 )
 
@@ -19,6 +19,6 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/kolesa-team/go-webp v1.0.4
-	golang.org/x/crypto v0.30.0 // indirect
+	golang.org/x/crypto v0.32.0 // indirect
 	golang.org/x/text v0.21.0
 )

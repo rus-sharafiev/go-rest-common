@@ -1,0 +1,73 @@
+package telegram
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	common "github.com/rus-sharafiev/go-rest-common"
+	"github.com/rus-sharafiev/go-rest-common/exception"
+)
+
+type ResponseMessage struct {
+	StatusCode int    `json:"statusCode"`
+	Message    string `json:"message"`
+}
+
+func (c *controller) handleUpdates(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Content-Type", "application/json")
+
+	if common.Config.Telegram.ApiSecret != r.Header.Get("X-Telegram-Bot-Api-Secret-Token") {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	var update Update
+	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	if message := update.Message; message != nil {
+		if text := message.Text; text != nil {
+			for command, action := range *c.actions {
+				if command == *text {
+					action(c, update.Message)
+				}
+			}
+		}
+	}
+
+}
+
+func (c controller) sendMessage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Content-Type", "application/json")
+
+	if common.Config.Telegram.ApiSecret != r.Header.Get("X-Telegram-Bot-Api-Secret-Token") {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	telegramApiUrl := "https://api.telegram.org/bot" + common.Config.Telegram.BotToken
+	resp, err := http.Post(telegramApiUrl+"/sendMessage", "application/json", r.Body)
+	if err != nil {
+		exception.InternalServerError(w, err)
+		return
+	}
+
+	var result BasicResponse
+	if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		exception.InternalServerError(w, err)
+		return
+	}
+
+	if !result.Ok && result.Description != nil {
+		exception.InternalServerError(w, fmt.Errorf("telegram error"))
+		return
+	}
+
+	json.NewEncoder(w).Encode(ResponseMessage{
+		StatusCode: http.StatusOK,
+		Message:    "sent successfully",
+	})
+}

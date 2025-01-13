@@ -21,13 +21,16 @@ type authConfig struct {
 	Prefix *[]string `json:"prefix,omitempty"`
 }
 
+type telegram struct {
+	BotToken  string `json:"bot_token"`
+	ApiSecret string `json:"api_secret"`
+}
+
 type config struct {
 	Port              *string          `json:"port,omitempty"`
 	DbConnString      *string          `json:"dbConnString,omitempty"`
 	StaticDir         *string          `json:"staticDir,omitempty"`
 	JwtKey            *string          `json:"jwtKey,omitempty"`
-	TelegramKey       *string          `json:"telegramKey,omitempty"`
-	TelegramAuthToken *string          `json:"telegramAuthToken,omitempty"`
 	RecaptchaSecret   *string          `json:"recaptchaSecret,omitempty"`
 	MailLogin         *string          `json:"mailLogin,omitempty"`
 	MailPassword      *string          `json:"mailPassword,omitempty"`
@@ -35,6 +38,7 @@ type config struct {
 	RefreshCookiePath *string          `json:"refreshCookiePath,omitempty"`
 	ConverterConfig   *converterConfig `json:"formdataConverter,omitempty"`
 	Auth              *authConfig      `json:"auth,omitempty"`
+	Telegram          *telegram        `json:"telegram,omitempty"`
 }
 
 var Config config
