@@ -7,31 +7,31 @@ import (
 	"github.com/rus-sharafiev/go-rest-common/db"
 )
 
-type controller struct {
+type Bot struct {
 	db      *db.Postgres
-	actions *map[string]func(c *controller, message *Message)
+	actions *map[string]func(b *Bot, message *Message)
 }
 
-func (c *controller) Handler(mux *http.ServeMux, actions *map[string]func(c *controller, message *Message)) {
+func (b *Bot) Handler(mux *http.ServeMux, actions *map[string]func(b *Bot, message *Message)) {
 	if common.Config.Telegram == nil {
 		return
 	}
 
 	// Set actions for webhooks
 	if actions != nil {
-		c.actions = actions
+		b.actions = actions
 	} else {
 		return
 	}
 
 	// Handle updates from telegram webhook
-	mux.HandleFunc("POST /telegram/updates", c.handleUpdates)
-	mux.HandleFunc("POST /telegram/updates/{$}", c.handleUpdates)
+	mux.HandleFunc("POST /telegram/updates", b.handleUpdates)
+	mux.HandleFunc("POST /telegram/updates/{$}", b.handleUpdates)
 
 	// Handle updates from telegram webhook
-	mux.HandleFunc("POST /telegram/message", c.sendMessage)
-	mux.HandleFunc("POST /telegram/message/{$}", c.sendMessage)
+	mux.HandleFunc("POST /telegram/message", b.sendMessage)
+	mux.HandleFunc("POST /telegram/message/{$}", b.sendMessage)
 
 }
 
-var Controller = &controller{db: &db.Instance}
+var Controller = &Bot{db: &db.Instance}

@@ -9,7 +9,7 @@ import (
 	common "github.com/rus-sharafiev/go-rest-common"
 )
 
-func (c *controller) SendMessage(message MessageToSend) error {
+func (b *Bot) SendMessage(message MessageToSend) error {
 	msgJson, err := json.Marshal(message)
 	if err != nil {
 		return err

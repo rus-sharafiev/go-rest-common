@@ -14,7 +14,7 @@ type ResponseMessage struct {
 	Message    string `json:"message"`
 }
 
-func (c *controller) handleUpdates(w http.ResponseWriter, r *http.Request) {
+func (b *Bot) handleUpdates(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/json")
 
 	if common.Config.Telegram.ApiSecret != r.Header.Get("X-Telegram-Bot-Api-Secret-Token") {
@@ -30,9 +30,9 @@ func (c *controller) handleUpdates(w http.ResponseWriter, r *http.Request) {
 
 	if message := update.Message; message != nil {
 		if text := message.Text; text != nil {
-			for command, action := range *c.actions {
+			for command, action := range *b.actions {
 				if command == *text {
-					action(c, update.Message)
+					action(b, update.Message)
 				}
 			}
 		}
@@ -40,7 +40,7 @@ func (c *controller) handleUpdates(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (c controller) sendMessage(w http.ResponseWriter, r *http.Request) {
+func (b *Bot) sendMessage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/json")
 
 	if common.Config.Telegram.ApiSecret != r.Header.Get("X-Telegram-Bot-Api-Secret-Token") {
