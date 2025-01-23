@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -384,8 +385,9 @@ func Interceptor(next http.Handler) http.Handler {
 
 // Check if one of the list strings matches the request URL path
 func inList(list []string, r *http.Request) bool {
-	path := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	return slices.ContainsFunc(list, func(s string) bool {
-		return slices.Contains(path, s)
+	path := strings.Trim(r.URL.Path, "/")
+	return slices.ContainsFunc(list, func(pattern string) bool {
+		matched, _ := regexp.MatchString(pattern, path)
+		return matched
 	})
 }
