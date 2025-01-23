@@ -40,13 +40,12 @@ func Connect(connString string) {
 
 // -- Methods ---------------------------------------------------------------------
 
-func (p *Postgres) Query(query *string, args ...any) (pgx.Rows, error) {
-	rows, err := p.pool.Query(context.Background(), *query, args...)
-	return rows, err
+func (p *Postgres) Query(ctx context.Context, query *string, args ...any) (pgx.Rows, error) {
+	return p.pool.Query(ctx, *query, args...)
 }
 
-func (p *Postgres) QueryRow(query *string, args ...any) pgx.Row {
-	return p.pool.QueryRow(context.Background(), *query, args...)
+func (p *Postgres) QueryRow(ctx context.Context, query *string, args ...any) pgx.Row {
+	return p.pool.QueryRow(ctx, *query, args...)
 }
 
 func (p *Postgres) PgxPoolClose() {
@@ -54,9 +53,9 @@ func (p *Postgres) PgxPoolClose() {
 }
 
 // Returns JSON string serialized by postgres
-func (p *Postgres) JsonString(w http.ResponseWriter, query *string, args ...any) (string, error) {
+func (p *Postgres) JsonString(ctx context.Context, w http.ResponseWriter, query *string, args ...any) (string, error) {
 	var result sql.NullString
-	if err := p.pool.QueryRow(context.Background(), *query, args...).Scan(&result); err != nil {
+	if err := p.pool.QueryRow(ctx, *query, args...).Scan(&result); err != nil {
 		if err == pgx.ErrNoRows {
 			return "null", nil
 		} else {
@@ -67,9 +66,9 @@ func (p *Postgres) JsonString(w http.ResponseWriter, query *string, args ...any)
 }
 
 // Writes JSON string serialized by postgres to provided http.ResponseWriter
-func (p *Postgres) WriteJsonString(w http.ResponseWriter, query *string, args ...any) {
+func (p *Postgres) WriteJsonString(ctx context.Context, w http.ResponseWriter, query *string, args ...any) {
 	var result sql.NullString
-	if err := p.pool.QueryRow(context.Background(), *query, args...).Scan(&result); err != nil {
+	if err := p.pool.QueryRow(ctx, *query, args...).Scan(&result); err != nil {
 		exception.PgxNoRows(w, err)
 		return
 	}
@@ -77,10 +76,10 @@ func (p *Postgres) WriteJsonString(w http.ResponseWriter, query *string, args ..
 }
 
 // Message JSON string serialized by PostgreSQL via provided websocket connection
-func (p *Postgres) MessageJsonString(conn *websocket.Conn, query *string, args ...any) error {
+func (p *Postgres) MessageJsonString(ctx context.Context, conn *websocket.Conn, query *string, args ...any) error {
 	if err := conn.WriteMessage(websocket.PingMessage, make([]byte, 0)); err == nil {
 		var result sql.NullString
-		if err = p.pool.QueryRow(context.Background(), *query, args...).Scan(&result); err == nil {
+		if err = p.pool.QueryRow(ctx, *query, args...).Scan(&result); err == nil {
 
 			if result.Valid {
 				if err = conn.WriteMessage(websocket.TextMessage, []byte(result.String)); err != nil {
@@ -99,8 +98,8 @@ func (p *Postgres) MessageJsonString(conn *websocket.Conn, query *string, args .
 	return nil
 }
 
-func (p *Postgres) CopyFrom(tableName string, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error) {
-	count, err := p.pool.CopyFrom(context.Background(), pgx.Identifier{tableName}, columnNames, rowSrc)
+func (p *Postgres) CopyFrom(ctx context.Context, tableName string, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error) {
+	count, err := p.pool.CopyFrom(ctx, pgx.Identifier{tableName}, columnNames, rowSrc)
 	if err != nil {
 		return 0, err
 	}
