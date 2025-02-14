@@ -46,6 +46,9 @@ func (b *Bot) handleUpdates(w http.ResponseWriter, r *http.Request) {
 						fmt.Printf(": match with %v", *text)
 					}
 				}
+				if b.log {
+					fmt.Println()
+				}
 			}
 		}
 	}
