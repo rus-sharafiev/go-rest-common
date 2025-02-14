@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 
 	common "github.com/rus-sharafiev/go-rest-common"
 	"github.com/rus-sharafiev/go-rest-common/exception"
@@ -30,8 +31,8 @@ func (b *Bot) handleUpdates(w http.ResponseWriter, r *http.Request) {
 
 	if message := update.Message; message != nil {
 		if text := message.Text; text != nil {
-			for command, action := range *b.actions {
-				if command == *text {
+			for commandPattern, action := range *b.actions {
+				if matched, _ := regexp.MatchString(commandPattern, *text); matched {
 					action(b, update.Message)
 				}
 			}
