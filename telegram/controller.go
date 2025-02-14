@@ -10,9 +10,10 @@ import (
 type Bot struct {
 	db      *db.Postgres
 	actions *map[string]func(b *Bot, message *Message)
+	log     bool
 }
 
-func (b *Bot) Handler(mux *http.ServeMux, actions *map[string]func(b *Bot, message *Message)) {
+func (b *Bot) Handler(mux *http.ServeMux, actions *map[string]func(b *Bot, message *Message), logMessages bool) {
 	if common.Config.Telegram == nil {
 		return
 	}
@@ -23,6 +24,8 @@ func (b *Bot) Handler(mux *http.ServeMux, actions *map[string]func(b *Bot, messa
 	} else {
 		return
 	}
+
+	b.log = logMessages
 
 	// Handle updates from telegram webhook
 	mux.HandleFunc("POST /telegram/updates", b.handleUpdates)

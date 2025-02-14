@@ -29,11 +29,22 @@ func (b *Bot) handleUpdates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if b.log {
+		b, _ := json.MarshalIndent(update, "", "  ")
+		fmt.Println(string(b))
+	}
+
 	if message := update.Message; message != nil {
 		if text := message.Text; text != nil {
 			for commandPattern, action := range *b.actions {
+				if b.log {
+					fmt.Print(commandPattern)
+				}
 				if matched, _ := regexp.MatchString(commandPattern, *text); matched {
 					action(b, update.Message)
+					if b.log {
+						fmt.Printf(": match with %v", *text)
+					}
 				}
 			}
 		}
