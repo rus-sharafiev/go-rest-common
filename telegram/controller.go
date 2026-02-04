@@ -1,10 +1,10 @@
 package telegram
 
 import (
+	"core"
 	"net/http"
 
-	common "github.com/rus-sharafiev/go-rest-common"
-	"github.com/rus-sharafiev/go-rest-common/db"
+	"core/db"
 )
 
 type Bot struct {
@@ -14,7 +14,7 @@ type Bot struct {
 }
 
 func (b *Bot) Handler(mux *http.ServeMux, actions *map[string]func(b *Bot, message *Message), logMessages bool) {
-	if common.Config.Telegram == nil {
+	if core.Config.Telegram == nil {
 		return
 	}
 

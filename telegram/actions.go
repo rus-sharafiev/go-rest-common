@@ -2,11 +2,10 @@ package telegram
 
 import (
 	"bytes"
+	"core"
 	"encoding/json"
 	"errors"
 	"net/http"
-
-	common "github.com/rus-sharafiev/go-rest-common"
 )
 
 func (b *Bot) SendMessage(message MessageToSend) error {
@@ -15,7 +14,7 @@ func (b *Bot) SendMessage(message MessageToSend) error {
 		return err
 	}
 
-	telegramApiUrl := "https://api.telegram.org/bot" + common.Config.Telegram.BotToken
+	telegramApiUrl := "https://api.telegram.org/bot" + core.Config.Telegram.BotToken
 	resp, err := http.Post(telegramApiUrl+"/sendMessage", "application/json", bytes.NewBuffer(msgJson))
 	if err != nil {
 		return err

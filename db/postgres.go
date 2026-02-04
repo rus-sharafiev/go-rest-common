@@ -8,10 +8,11 @@ import (
 	"net/http"
 	"sync"
 
+	"core/exception"
+
 	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/rus-sharafiev/go-rest-common/exception"
 )
 
 type Postgres struct {

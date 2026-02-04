@@ -1,13 +1,13 @@
 package telegram
 
 import (
+	"core"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
 
-	common "github.com/rus-sharafiev/go-rest-common"
-	"github.com/rus-sharafiev/go-rest-common/exception"
+	"core/exception"
 )
 
 type ResponseMessage struct {
@@ -18,7 +18,7 @@ type ResponseMessage struct {
 func (b *Bot) handleUpdates(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/json")
 
-	if common.Config.Telegram.ApiSecret != r.Header.Get("X-Telegram-Bot-Api-Secret-Token") {
+	if core.Config.Telegram.ApiSecret != r.Header.Get("X-Telegram-Bot-Api-Secret-Token") {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -58,12 +58,12 @@ func (b *Bot) handleUpdates(w http.ResponseWriter, r *http.Request) {
 func (b *Bot) sendMessage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/json")
 
-	if common.Config.Telegram.ApiSecret != r.Header.Get("X-Telegram-Bot-Api-Secret-Token") {
+	if core.Config.Telegram.ApiSecret != r.Header.Get("X-Telegram-Bot-Api-Secret-Token") {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
 
-	telegramApiUrl := "https://api.telegram.org/bot" + common.Config.Telegram.BotToken
+	telegramApiUrl := "https://api.telegram.org/bot" + core.Config.Telegram.BotToken
 	resp, err := http.Post(telegramApiUrl+"/sendMessage", "application/json", r.Body)
 	if err != nil {
 		exception.InternalServerError(w, err)

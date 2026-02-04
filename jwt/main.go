@@ -1,10 +1,10 @@
 package jwt
 
 import (
+	"core"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	common "github.com/rus-sharafiev/go-rest-common"
 )
 
 type Claims struct {
@@ -24,7 +24,7 @@ func GenerateAccessToken(id int, userAccess string) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(*common.Config.JwtKey))
+	return token.SignedString([]byte(core.Config.JwtKey))
 }
 
 func GenerateRefreshToken(id int, userAccess string) (string, error) {
@@ -38,12 +38,12 @@ func GenerateRefreshToken(id int, userAccess string) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(*common.Config.JwtKey))
+	return token.SignedString([]byte(core.Config.JwtKey))
 }
 
 func Validate(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(*common.Config.JwtKey), nil
+		return []byte(core.Config.JwtKey), nil
 	})
 
 	if err != nil {

@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/rus-sharafiev/go-rest-common/jwt"
+	"core/jwt"
 )
 
 func Guard(next http.Handler) http.Handler {

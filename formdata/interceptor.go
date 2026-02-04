@@ -17,13 +17,13 @@ import (
 	"strconv"
 	"strings"
 
+	"core"
+	"core/exception"
+
 	"github.com/google/uuid"
 	"github.com/kolesa-team/go-webp/encoder"
-	cwebp "github.com/kolesa-team/go-webp/webp"
-	common "github.com/rus-sharafiev/go-rest-common"
-	"github.com/rus-sharafiev/go-rest-common/exception"
+	"github.com/kolesa-team/go-webp/webp"
 	"golang.org/x/image/draw"
-	"golang.org/x/image/webp"
 )
 
 type uploadErrors struct {
@@ -40,67 +40,70 @@ type uploadError struct {
 // https://github.com/rus-sharafiev/fetch-api/blob/master/src/fetch-api.ts#L180
 func Interceptor(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		currentPath := strings.Split(strings.Trim(r.URL.Path, "/"), "/")[0]
-		config := common.Config.ConverterConfig
 
-		// Check whether to use the converter
-		if config == nil {
+		if r.Method != http.MethodPost {
 			next.ServeHTTP(w, r)
 			return
-		}
-
-		// Check for whitea and black lists
-		if wl := config.Whitelist; wl != nil && !inList(*wl, r) {
-			next.ServeHTTP(w, r)
-			return
-		} else if bl := config.Blacklist; wl == nil && bl != nil && inList(*bl, r) {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		// Select the upload dir
-		uploadPath := "uploads"
-
-		if config.UploadPath != nil {
-			uploadPath = *config.UploadPath
-		}
-
-		if config.UploadPathByRoute != nil {
-			pathByRouteMap := *config.UploadPathByRoute
-			if pathByRoute := pathByRouteMap[currentPath]; len(pathByRoute) > 0 {
-				uploadPath = pathByRoute
-			}
-		}
-
-		// Use subfolders
-		fullPath := uploadPath
-		if config.UploadPathPrefix != nil {
-			fullPath = path.Join(*config.UploadPathPrefix, fullPath)
-		}
-
-		if config.UseUserSubfolder != nil && *config.UseUserSubfolder {
-
-			userDir := ""
-			if userID := r.Header.Get("userID"); len(userID) != 0 {
-				userDir = userID
-			} else {
-				exception.UnauthorizedError(w, fmt.Errorf("only authorized users can save files"))
-				return
-			}
-
-			fullPath = path.Join(fullPath, userDir)
-		}
-
-		// Check if the dir exists
-		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-			if err := os.Mkdir(fullPath, 0755); err != nil {
-				exception.InternalServerError(w, err)
-				return
-			}
 		}
 
 		// Check whether the request contains multipart/form-data
 		if mr, err := r.MultipartReader(); err == nil {
+
+			currentPath := strings.Split(strings.Trim(r.URL.Path, "/"), "/")[0]
+			config := core.Config.ConverterConfig
+
+			// Check whether to use the converter
+			if config == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Check for whitea and black lists
+			if wl := config.Whitelist; wl != nil && !inList(wl, r) {
+				next.ServeHTTP(w, r)
+				return
+			} else if bl := config.Blacklist; wl == nil && bl != nil && inList(bl, r) {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Select the upload dir
+			uploadPath := "uploads"
+
+			if len(config.UploadPath) > 0 {
+				uploadPath = config.UploadPath
+			}
+
+			if len(config.UploadPathByRoute) > 0 {
+				pathByRouteMap := config.UploadPathByRoute
+				if pathByRoute, ok := pathByRouteMap[currentPath]; ok {
+					uploadPath = pathByRoute
+				}
+			}
+
+			// Use subfolders
+			if len(config.UploadPathPrefix) > 0 {
+				uploadPath = path.Join(config.UploadPathPrefix, uploadPath)
+			}
+
+			if config.UseUserSubfolder {
+
+				userDir := ""
+				if userID := r.Header.Get("userID"); len(userID) != 0 {
+					userDir = userID
+				} else {
+					exception.UnauthorizedError(w, fmt.Errorf("only authorized users can save files"))
+					return
+				}
+
+				uploadPath = path.Join(uploadPath, userDir)
+			}
+
+			// Check if the dir exists
+			if err := os.MkdirAll(uploadPath, 0755); err != nil {
+				exception.InternalServerError(w, err)
+				return
+			}
 
 			// Read the form
 			form, err := mr.ReadForm(32 << 20)
@@ -109,7 +112,7 @@ func Interceptor(next http.Handler) http.Handler {
 				return
 			}
 
-			resultChan := make(chan []interface{})
+			resultChan := make(chan []any)
 			errChan := make(chan uploadError)
 			fileList := []string{}
 
@@ -136,7 +139,7 @@ func Interceptor(next http.Handler) http.Handler {
 							return
 						}
 
-						fileName := path.Join(fullPath, id.String()+filepath.Ext(fileHeader.Filename))
+						fileName := path.Join(uploadPath, id.String()+filepath.Ext(fileHeader.Filename))
 
 						// Create output file
 						outFile, err := os.Create(fileName)
@@ -146,7 +149,7 @@ func Interceptor(next http.Handler) http.Handler {
 						}
 						defer outFile.Close()
 
-						if config.OptimizeImages == nil {
+						if len(config.OptimizeImagesByRoute) == 0 {
 
 							// Write original file
 							_, err = io.Copy(outFile, file)
@@ -167,11 +170,10 @@ func Interceptor(next http.Handler) http.Handler {
 								return
 							}
 
-							routesMap := *config.OptimizeImages
-							var sizesArr *[]int
-							for route, v := range routesMap {
+							var sizesArr []int
+							for route, v := range config.OptimizeImagesByRoute {
 								if route == currentPath {
-									sizesArr = &v
+									sizesArr = v
 								}
 							}
 
@@ -179,8 +181,8 @@ func Interceptor(next http.Handler) http.Handler {
 							allowedTypes := []string{"image/png", "image/jpeg", "image/webp"}
 							isImage := slices.Contains(allowedTypes, contentType)
 
-							if sizesArr != nil && len(*sizesArr) > 0 && isImage {
-								sizes := *sizesArr
+							if len(sizesArr) > 0 && isImage {
+								sizes := sizesArr
 								isWebP := false
 
 								var img image.Image
@@ -190,7 +192,7 @@ func Interceptor(next http.Handler) http.Handler {
 								case "image/jpeg":
 									img, _ = jpeg.Decode(&fileBuf)
 								case "image/webp":
-									img, _ = webp.Decode(&fileBuf)
+									img, _ = webp.Decode(&fileBuf, nil)
 									isWebP = true
 								}
 
@@ -217,7 +219,7 @@ func Interceptor(next http.Handler) http.Handler {
 										sizeString := strconv.Itoa(size)
 
 										// Create output file
-										optimizedName := path.Join(fullPath, id.String()+"_"+sizeString+"_optimized.webp")
+										optimizedName := path.Join(uploadPath, id.String()+"_"+sizeString+"_optimized.webp")
 										outFile, err := os.Create(optimizedName)
 										if err != nil {
 											errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
@@ -239,7 +241,7 @@ func Interceptor(next http.Handler) http.Handler {
 												// otherwise encode to webp
 											} else {
 
-												if err := cwebp.Encode(outFile, img, webpOptions); err != nil {
+												if err := webp.Encode(outFile, img, webpOptions); err != nil {
 													errorSizesChan <- err
 													return
 												}
@@ -254,13 +256,13 @@ func Interceptor(next http.Handler) http.Handler {
 											draw.BiLinear.Scale(dst, dst.Rect, img, img.Bounds(), draw.Over, nil)
 
 											// Encode to jpeg
-											if err := cwebp.Encode(outFile, dst, webpOptions); err != nil {
+											if err := webp.Encode(outFile, dst, webpOptions); err != nil {
 												errorSizesChan <- err
 												return
 											}
 										}
 
-										imageSizesChan <- []string{sizeString, "/" + strings.Replace(optimizedName, fullPath, uploadPath, 1)}
+										imageSizesChan <- []string{sizeString, "/" + strings.Replace(optimizedName, uploadPath, uploadPath, 1)}
 									}()
 								}
 
@@ -281,13 +283,13 @@ func Interceptor(next http.Handler) http.Handler {
 									return
 								}
 
-								imageSizes["original"] = "/" + strings.Replace(fileName, fullPath, uploadPath, 1)
+								imageSizes["original"] = "/" + strings.Replace(fileName, uploadPath, uploadPath, 1)
 
-								resultChan <- []interface{}{name, imageSizes}
+								resultChan <- []any{name, imageSizes}
 
 							} else {
 
-								resultChan <- []interface{}{name, "/" + strings.Replace(fileName, fullPath, uploadPath, 1)}
+								resultChan <- []any{name, "/" + strings.Replace(fileName, uploadPath, uploadPath, 1)}
 
 							}
 						}
@@ -297,7 +299,7 @@ func Interceptor(next http.Handler) http.Handler {
 			}
 
 			// Create uploaded files map and errors slice
-			filesUrlMap := make(map[string]interface{})
+			filesUrlMap := make(map[string]any)
 			errorSlice := []uploadError{}
 
 			for range fileList {

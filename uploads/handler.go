@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/rus-sharafiev/go-rest-common/exception"
-	"github.com/rus-sharafiev/go-rest-common/jwt"
+	"core/exception"
+	"core/jwt"
 )
 
 type handler struct{}
@@ -31,7 +31,7 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	uploadDir := filepath.Join("uploads", strconv.Itoa(claims.UserId))
 	// if claims.UserAccess == "ADMIN" {
-	// 	uploadDir = filepath.Join(*common.Config.UploadDir)
+	// 	uploadDir = filepath.Join(core.Config.UploadDir)
 	// }
 
 	r.URL.RawQuery = ""

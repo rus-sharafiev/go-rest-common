@@ -6,13 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	common "github.com/rus-sharafiev/go-rest-common"
+	"core"
 )
 
 type handler struct{}
 
 func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	path := filepath.Join(*common.Config.StaticDir, r.URL.Path)
+	path := filepath.Join(core.Config.StaticDir, r.URL.Path)
 	index := "index.html"
 	fileType := filepath.Ext(path)
 
@@ -20,7 +20,7 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Check whether a file exists or is a directory
 	if fi, err := os.Stat(path); os.IsNotExist(err) || fi.IsDir() {
-		htmlFile := filepath.Join(*common.Config.StaticDir, index)
+		htmlFile := filepath.Join(core.Config.StaticDir, index)
 		if acceptGzip {
 			if _, err := os.Stat(htmlFile + ".gz"); err == nil {
 				w.Header().Add("Content-Encoding", "gzip")
@@ -55,7 +55,7 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Add("Cache-Control", "no-cache")
-	http.FileServer(http.Dir(*common.Config.StaticDir)).ServeHTTP(w, r)
+	http.FileServer(http.Dir(core.Config.StaticDir)).ServeHTTP(w, r)
 }
 
 var Handler = &handler{}

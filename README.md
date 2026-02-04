@@ -1,6 +1,7 @@
 # Common services for the [REST service](https://github.com/rus-sharafiev/go-rest)
 
 The module includes the following packages:
+
 - db
   > PostgreSQL instance, instance creator and custom methods (based on the [pgx driver](https://github.com/jackc/pgx))
 - exception
