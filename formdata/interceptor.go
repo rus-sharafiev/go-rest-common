@@ -1,7 +1,6 @@
 package formdata
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -40,6 +39,7 @@ type uploadError struct {
 // https://github.com/rus-sharafiev/fetch-api/blob/master/src/fetch-api.ts#L180
 func Interceptor(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
 
 		if r.Method != http.MethodPost {
 			next.ServeHTTP(w, r)
@@ -48,6 +48,11 @@ func Interceptor(next http.Handler) http.Handler {
 
 		// Check whether the request contains multipart/form-data
 		if mr, err := r.MultipartReader(); err == nil {
+
+			if userID := r.Header.Get("userID"); len(userID) == 0 {
+				exception.UnauthorizedError(w, fmt.Errorf("only authorized users can save files"))
+				return
+			}
 
 			currentPath := strings.Split(strings.Trim(r.URL.Path, "/"), "/")[0]
 			config := core.Config.ConverterConfig
@@ -87,16 +92,7 @@ func Interceptor(next http.Handler) http.Handler {
 			}
 
 			if config.UseUserSubfolder {
-
-				userDir := ""
-				if userID := r.Header.Get("userID"); len(userID) != 0 {
-					userDir = userID
-				} else {
-					exception.UnauthorizedError(w, fmt.Errorf("only authorized users can save files"))
-					return
-				}
-
-				uploadPath = path.Join(uploadPath, userDir)
+				uploadPath = path.Join(uploadPath, r.Header.Get("userID"))
 			}
 
 			// Check if the dir exists
@@ -111,17 +107,16 @@ func Interceptor(next http.Handler) http.Handler {
 				exception.InternalServerError(w, err)
 				return
 			}
+			defer form.RemoveAll()
 
 			resultChan := make(chan []any)
 			errChan := make(chan uploadError)
-			fileList := []string{}
+			filesQty := 0
 
 			// Iterate over the range of multipart file fields
 			for name, values := range form.File {
-				for index, fileHeader := range values {
-					fileList = append(fileList, name+"-"+strconv.Itoa(index))
-					fileHeader := fileHeader
-					name := name
+				for _, fileHeader := range values {
+					filesQty++
 
 					go func() {
 
@@ -131,15 +126,10 @@ func Interceptor(next http.Handler) http.Handler {
 							errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
 							return
 						}
+						defer file.Close()
 
-						// Generate unique file name
-						id, err := uuid.NewRandom()
-						if err != nil {
-							errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
-							return
-						}
-
-						fileName := path.Join(uploadPath, id.String()+filepath.Ext(fileHeader.Filename))
+						id := uuid.NewString()
+						fileName := path.Join(uploadPath, id+filepath.Ext(fileHeader.Filename))
 
 						// Create output file
 						outFile, err := os.Create(fileName)
@@ -149,31 +139,18 @@ func Interceptor(next http.Handler) http.Handler {
 						}
 						defer outFile.Close()
 
-						if len(config.OptimizeImagesByRoute) == 0 {
+						// Write original file
+						if _, err = io.Copy(outFile, file); err != nil {
+							errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
+							return
+						}
 
-							// Write original file
-							_, err = io.Copy(outFile, file)
-							if err != nil {
-								errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
-								return
-							}
+						if len(config.OptimizeImagesByRoute) > 0 {
 
-							// Create optimized images
-						} else {
-
-							// Write original file and fill the buffer for image.Image
-							var fileBuf bytes.Buffer
-							fileReader := io.TeeReader(file, &fileBuf)
-							_, err = io.Copy(outFile, fileReader)
-							if err != nil {
-								errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
-								return
-							}
-
-							var sizesArr []int
+							var sizes []int
 							for route, v := range config.OptimizeImagesByRoute {
 								if route == currentPath {
-									sizesArr = v
+									sizes = v
 								}
 							}
 
@@ -181,18 +158,24 @@ func Interceptor(next http.Handler) http.Handler {
 							allowedTypes := []string{"image/png", "image/jpeg", "image/webp"}
 							isImage := slices.Contains(allowedTypes, contentType)
 
-							if len(sizesArr) > 0 && isImage {
-								sizes := sizesArr
+							if len(sizes) > 0 && isImage {
 								isWebP := false
+
+								if seeker, ok := file.(io.Seeker); ok {
+									if _, err = seeker.Seek(0, io.SeekStart); err != nil {
+										errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
+										return
+									}
+								}
 
 								var img image.Image
 								switch contentType {
 								case "image/png":
-									img, _ = png.Decode(&fileBuf)
+									img, _ = png.Decode(file)
 								case "image/jpeg":
-									img, _ = jpeg.Decode(&fileBuf)
+									img, _ = jpeg.Decode(file)
 								case "image/webp":
-									img, _ = webp.Decode(&fileBuf, nil)
+									img, _ = webp.Decode(file, nil)
 									isWebP = true
 								}
 
@@ -201,7 +184,7 @@ func Interceptor(next http.Handler) http.Handler {
 								aspectRatio := float32(imgWidth) / float32(imgHeight)
 
 								// Create webp options object
-								webpOptions, err := encoder.NewLossyEncoderOptions(encoder.PresetDefault, 90)
+								webpOptions, err := encoder.NewLossyEncoderOptions(encoder.PresetPhoto, 90)
 								if err != nil {
 									errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
 									return
@@ -213,16 +196,14 @@ func Interceptor(next http.Handler) http.Handler {
 								errorSizesChan := make(chan error)
 
 								for _, size := range sizes {
-									size := size
 
 									go func() {
-										sizeString := strconv.Itoa(size)
 
 										// Create output file
-										optimizedName := path.Join(uploadPath, id.String()+"_"+sizeString+"_optimized.webp")
+										optimizedName := path.Join(uploadPath, fmt.Sprintf("%v_%v_optimized.webp", id, size))
 										outFile, err := os.Create(optimizedName)
 										if err != nil {
-											errChan <- uploadError{Filename: fileHeader.Filename, Error: err.Error()}
+											errorSizesChan <- err
 											return
 										}
 										defer outFile.Close()
@@ -232,8 +213,7 @@ func Interceptor(next http.Handler) http.Handler {
 											// if source img is webp, just copy
 											if isWebP {
 
-												_, err = io.Copy(outFile, file)
-												if err != nil {
+												if _, err = io.Copy(outFile, file); err != nil {
 													errorSizesChan <- err
 													return
 												}
@@ -262,7 +242,7 @@ func Interceptor(next http.Handler) http.Handler {
 											}
 										}
 
-										imageSizesChan <- []string{sizeString, "/" + strings.Replace(optimizedName, uploadPath, uploadPath, 1)}
+										imageSizesChan <- []string{strconv.Itoa(size), "/" + optimizedName}
 									}()
 								}
 
@@ -275,6 +255,8 @@ func Interceptor(next http.Handler) http.Handler {
 										imageSizes[sizes[0]] = sizes[1]
 									case err := <-errorSizesChan:
 										errorSizes = err
+									case <-ctx.Done():
+										return
 									}
 								}
 
@@ -283,15 +265,16 @@ func Interceptor(next http.Handler) http.Handler {
 									return
 								}
 
-								imageSizes["original"] = "/" + strings.Replace(fileName, uploadPath, uploadPath, 1)
+								imageSizes["original"] = "/" + fileName
 
 								resultChan <- []any{name, imageSizes}
 
 							} else {
-
-								resultChan <- []any{name, "/" + strings.Replace(fileName, uploadPath, uploadPath, 1)}
-
+								resultChan <- []any{name, "/" + fileName}
 							}
+
+						} else {
+							resultChan <- []any{name, "/" + fileName}
 						}
 
 					}()
@@ -302,7 +285,7 @@ func Interceptor(next http.Handler) http.Handler {
 			filesUrlMap := make(map[string]any)
 			errorSlice := []uploadError{}
 
-			for range fileList {
+			for range filesQty {
 				select {
 				case result := <-resultChan:
 					if name, ok := result[0].(string); ok {
@@ -336,6 +319,8 @@ func Interceptor(next http.Handler) http.Handler {
 
 				case err := <-errChan:
 					errorSlice = append(errorSlice, err)
+				case <-ctx.Done():
+					return
 				}
 			}
 
@@ -373,8 +358,6 @@ func Interceptor(next http.Handler) http.Handler {
 					resultJson = jsonField[0]
 				}
 			}
-
-			// Add errors if exists
 
 			// Write result JSON string to request body
 			w.Header().Set("Content-Type", "application/json")

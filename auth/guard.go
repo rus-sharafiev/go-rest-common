@@ -10,12 +10,12 @@ import (
 
 func Guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "application/json")
 
 		// Delete user headers if exist
 		r.Header.Del("userID")
 		r.Header.Del("userAccess")
 
-		// Get token
 		var token string
 		if auth := r.Header.Get("Authorization"); len(auth) != 0 {
 			token = strings.Split(auth, " ")[1]
@@ -30,11 +30,6 @@ func Guard(next http.Handler) http.Handler {
 				r.Header.Add("userID", strconv.Itoa(claims.UserId))
 				r.Header.Add("userAccess", claims.UserAccess)
 			}
-		}
-
-		// Add Content-Type header for API paths
-		if strings.Contains(r.URL.Path, "/api/") {
-			w.Header().Add("Content-Type", "application/json")
 		}
 
 		next.ServeHTTP(w, r)

@@ -113,6 +113,15 @@ func UnauthorizedError(w http.ResponseWriter, e error) {
 	json.NewEncoder(w).Encode(&err)
 }
 
+func UnauthorizedMessage(w http.ResponseWriter, msg string) {
+	err := Error{
+		StatusCode: http.StatusUnauthorized,
+		Message:    msg,
+	}
+	w.WriteHeader(http.StatusUnauthorized)
+	json.NewEncoder(w).Encode(&err)
+}
+
 func InternalServerError(w http.ResponseWriter, e error) {
 	err := Error{
 		StatusCode: http.StatusInternalServerError,
