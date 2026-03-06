@@ -41,7 +41,7 @@ func Interceptor(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		if r.Method != http.MethodPost {
+		if r.Method != http.MethodPost && r.Method != http.MethodPatch {
 			next.ServeHTTP(w, r)
 			return
 		}
